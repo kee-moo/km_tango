@@ -605,7 +605,10 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
     sample_rate, audio_waveform = audio_path
     sf.write(saved_audio_path, audio_waveform, sample_rate)
     # 音频重采样
-    audio_waveform, sample_rate = librosa.load(saved_audio_path)
+    if isinstance(audio_path, str):  # 如果是路径，加载音频文件
+        audio_waveform, sample_rate = librosa.load(audio_path, sr=None)
+    elif isinstance(audio_path, tuple) and len(audio_path) == 2:  # 如果是元组，直接解包
+        sample_rate, audio_waveform = audio_path
     # print(audio_waveform.shape)
     resampled_audio = librosa.resample(audio_waveform, orig_sr=sample_rate, target_sr=TARGET_SR)
     required_length = int(TARGET_SR * (128 / 30)) * 2
