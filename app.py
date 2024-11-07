@@ -1,8 +1,6 @@
-import asyncio
 import logging
 import os
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any, Dict, Optional
@@ -868,7 +866,6 @@ async def async_generate_task(task_id, source_audio_path, driven_video_path, **k
     logging.info("task is in process, result path: {}".format(result_path))
     return task_id
 
-thread_pool = ThreadPoolExecutor()
 
 @app.post("/km_tango/generator")
 async def generate(background_tasks: BackgroundTasks,
@@ -886,8 +883,7 @@ async def generate(background_tasks: BackgroundTasks,
     with open(driven_video_path, "wb") as buffer:
         shutil.copyfileobj(driven_video.file, buffer)
     task_id = str(uuid.uuid4())
-    loop = asyncio.get_running_loop()
-    loop.run_in_executor(thread_pool, async_generate_task, task_id, source_audio_path, driven_video_path, seed)
+    background_tasks.add_task(async_generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
     return create_response(0, "ok", {"task_id": task_id})
 
 
