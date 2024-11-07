@@ -25,6 +25,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+*.zip
+*.idea
 
 
 # watermarked videos will be saved at root directory, but we don't want to track them
@@ -40,8 +42,10 @@ frame-interpolation-pytorch/*.pt
 
 # submodules
 Wav2Lip/
+Wav2Lip-HD/
 frame-interpolation-pytorch/
 SMPLer-X/
+gradio_cached_examples/*
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

@@ -1,4 +1,9 @@
+import logging
 import os
+from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
+from typing import Any, Dict, Optional
+
 import gradio as gr
 import gc
 import soundfile as sf
@@ -8,6 +13,9 @@ from omegaconf import OmegaConf
 import random
 import numpy as np
 import librosa
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
 import emage.mertic  # noqa: F401 # somehow this must be imported, even though it is not used directly
 from decord import VideoReader
 from PIL import Image
@@ -18,12 +26,38 @@ import torch
 import torch.nn.functional as F
 import smplx
 import igraph
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form
+import uvicorn
+
+app = FastAPI()
 
 # import emage
 from utils.video_io import save_videos_from_pil
 from utils.genextend_inference_utils import adjust_statistics_to_match_reference
 from create_graph import path_visualization, graph_pruning, get_motion_reps_tensor, path_visualization_v2
 from utils.download_utils import download_files_from_repo
+
+log_dir = 'log'
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# 设置日志文件路径，并按日期和小时命名
+current_time = datetime.now().strftime("%Y-%m-%d-%H")
+log_file = os.path.join(log_dir, f'info-{current_time}.log')
+
+# 设置日志文件按小时切分
+log_handler = TimedRotatingFileHandler(
+    log_file, when='H', interval=1, backupCount=24
+)
+
+log_handler.setFormatter(
+    logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+)
+
+# 配置日志
+logging.basicConfig(level=logging.DEBUG, handlers=[log_handler])
+
+task_results: Dict[str, Optional[str]] = {}
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -34,7 +68,8 @@ shutil.copyfile("./assets/transforms.py", "./SMPLer-X/common/utils/transforms.py
 shutil.copyfile("./assets/inference.py", "./SMPLer-X/main/inference.py")
 
 
-def search_path_dp(graph, audio_low_np, audio_high_np, loop_penalty=0.1, top_k=1, search_mode="both", continue_penalty=0.1):
+def search_path_dp(graph, audio_low_np, audio_high_np, loop_penalty=0.1, top_k=1, search_mode="both",
+                   continue_penalty=0.1):
     T = audio_low_np.shape[0]  # Total time steps
     # N = len(graph.vs)  # Total number of nodes in the graph
 
@@ -60,7 +95,8 @@ def search_path_dp(graph, audio_low_np, audio_high_np, loop_penalty=0.1, top_k=1
 
         visited_nodes = {node_index: 1}  # Initialize visit count as a dictionary
 
-        min_cost[0][node_index] = [(cost, None, None, 0, visited_nodes)]  # Initialize with no predecessor and 0 non-continue count
+        min_cost[0][node_index] = [
+            (cost, None, None, 0, visited_nodes)]  # Initialize with no predecessor and 0 non-continue count
 
     # DP over time steps
     for t in range(1, T):
@@ -76,7 +112,8 @@ def search_path_dp(graph, audio_low_np, audio_high_np, loop_penalty=0.1, top_k=1
                 is_continue_edge = graph.es[edge_id]["is_continue"]
                 # prev_node = graph.vs[prev_node_index]
                 if prev_node_index in min_cost[t - 1]:
-                    for tuple_index, (prev_cost, _, _, prev_non_continue_count, prev_visited) in enumerate(min_cost[t - 1][prev_node_index]):
+                    for tuple_index, (prev_cost, _, _, prev_non_continue_count, prev_visited) in enumerate(
+                            min_cost[t - 1][prev_node_index]):
                         # Loop punishment
                         if node_index in prev_visited:
                             loop_time = prev_visited[node_index]  # Get the count of previous visits
@@ -92,7 +129,8 @@ def search_path_dp(graph, audio_low_np, audio_high_np, loop_penalty=0.1, top_k=1
                         motion_high = node["motion_high"]  # Shape: [C]
 
                         if search_mode == "both":
-                            cost_increment = 2 - (np.dot(audio_low_np[t], motion_low.T) + np.dot(audio_high_np[t], motion_high.T))
+                            cost_increment = 2 - (
+                                    np.dot(audio_low_np[t], motion_low.T) + np.dot(audio_high_np[t], motion_high.T))
                         elif search_mode == "high_level":
                             cost_increment = 1 - np.dot(audio_high_np[t], motion_high.T)
                         elif search_mode == "low_level":
@@ -241,7 +279,8 @@ def test_fn(model, device, iteration, candidate_json_path, test_path, cfg, audio
         else:  # t < window_size:
             gap = window_size - t
             motion_slice = torch.cat(
-                [motion_tensor, torch.zeros((motion_tensor.shape[0], gap, motion_tensor.shape[2])).to(motion_tensor.device)], 1
+                [motion_tensor,
+                 torch.zeros((motion_tensor.shape[0], gap, motion_tensor.shape[2])).to(motion_tensor.device)], 1
             )
             motion_features = actual_model.get_motion_features(motion_slice)
             # motion_high = motion_features["motion_high_weight"].cpu().numpy()
@@ -341,7 +380,8 @@ def test_fn(model, device, iteration, candidate_json_path, test_path, cfg, audio
 
     res_motion = []
     counter = 0
-    wav2lip_checkpoint_path = os.path.join(SCRIPT_PATH, "Wav2Lip/checkpoints/wav2lip_gan.pth")  # Update this path to your Wav2Lip checkpoint
+    wav2lip_checkpoint_path = os.path.join(SCRIPT_PATH,
+                                           "Wav2Lip/checkpoints/wav2lip_gan.pth")  # Update this path to your Wav2Lip checkpoint
     wav2lip_script_path = os.path.join(SCRIPT_PATH, "Wav2Lip/inference.py")
     for path, is_continue in zip(path_list, is_continue_list):
         if False:
@@ -376,7 +416,8 @@ def test_fn(model, device, iteration, candidate_json_path, test_path, cfg, audio
                 video_np.append(Image.fromarray(video_frame))
             adjusted_video_pil = adjust_statistics_to_match_reference([video_np])
             save_videos_from_pil(
-                adjusted_video_pil[0], os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"), fps=graph.vs[0]["fps"], bitrate=2000000
+                adjusted_video_pil[0], os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"),
+                fps=graph.vs[0]["fps"], bitrate=2000000
             )
 
         audio_temp_path = audio_path
@@ -427,7 +468,8 @@ def test_fn(model, device, iteration, candidate_json_path, test_path, cfg, audio
             video_np.append(Image.fromarray(video_frame))
         adjusted_video_pil = adjust_statistics_to_match_reference([video_np])
         save_videos_from_pil(
-            adjusted_video_pil[0], os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"), fps=graph.vs[0]["fps"], bitrate=2000000
+            adjusted_video_pil[0], os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"), fps=graph.vs[0]["fps"],
+            bitrate=2000000
         )
 
         audio_temp_path = audio_path
@@ -453,6 +495,7 @@ def init_class(module_name, class_name, config, **kwargs):
     return instance
 
 
+# 设置随机数
 def seed_everything(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -476,6 +519,7 @@ def prepare_all(yaml_name):
     return config
 
 
+# 提取10秒的视频
 def save_first_10_seconds(video_path, output_path="./save_video.mp4", max_length=512):
     if os.path.exists(output_path):
         os.remove(output_path)
@@ -535,24 +579,28 @@ character_name_to_yaml = {
     "101099-00_18_09-00_18_19.mp4": "./datasets/data_json/show_oliver_test/Stupid_Watergate_-_Last_Week_Tonight_with_John_Oliver_HBO-FVFdsl29s_Q.mkv.json",
 }
 
-
 TARGET_SR = 16000
 OUTPUT_DIR = os.path.join(SCRIPT_PATH, "outputs/")
 
 
 # @spaces.GPU(duration=200)
 def tango(audio_path, character_name, seed, create_graph=False, video_folder_path=None):
+    # 重新生成目录
     shutil.rmtree(OUTPUT_DIR, ignore_errors=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    # 加载gradio配置文件
     cfg_file = os.path.join(SCRIPT_PATH, "configs/gradio.yaml")
     cfg = prepare_all(cfg_file)
     cfg.seed = seed
+    # 设置随机数
     seed_everything(cfg.seed)
+    # 生成检查点、音频保存目录
     experiment_ckpt_dir = os.path.join(OUTPUT_DIR, cfg.exp_name)
     saved_audio_path = os.path.join(OUTPUT_DIR, "saved_audio.wav")
+    # 获取音频波形和采样率并写入到本地 TODO 下载音频
     sample_rate, audio_waveform = audio_path
     sf.write(saved_audio_path, audio_waveform, sample_rate)
-
+    # 音频重采样
     audio_waveform, sample_rate = librosa.load(saved_audio_path)
     # print(audio_waveform.shape)
     resampled_audio = librosa.resample(audio_waveform, orig_sr=sample_rate, target_sr=TARGET_SR)
@@ -560,18 +608,18 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
     resampled_audio = resampled_audio[:required_length]
     sf.write(saved_audio_path, resampled_audio, TARGET_SR)
     audio_path = saved_audio_path
-
+    # 设置视频训练集路径
     yaml_name = os.path.join(SCRIPT_PATH, "datasets/data_json/youtube_test/speaker1.json")
     cfg.data.test_meta_paths = yaml_name
     print(yaml_name)
-
+    # 生成上传视频目录
     video_folder_path = os.path.join(OUTPUT_DIR, "tmpvideo")
     if os.path.basename(character_name) not in character_name_to_yaml.keys():
         create_graph = True
         # load video, and save it to "./save_video.mp4 for the first 20s of the video."
         os.makedirs(video_folder_path, exist_ok=True)
         save_first_10_seconds(character_name, os.path.join(video_folder_path, "save_video.mp4"))
-
+    # 运行图形处理
     if create_graph:
         data_save_path = os.path.join(OUTPUT_DIR, "tmpdata")
         json_save_path = os.path.join(OUTPUT_DIR, "save_video.json")
@@ -585,7 +633,7 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
         cfg.data.test_meta_paths = json_save_path
         gc.collect()
         torch.cuda.empty_cache()
-
+    # 初始化图像模型
     smplx_model = smplx.create(
         "./emage/smplx_models/",
         model_type="smplx",
@@ -774,23 +822,57 @@ def make_demo():
             outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
         )
 
-        with gr.Row():
-            with gr.Column(scale=4):
-                gr.Examples(
-                    examples=combined_examples,
-                    inputs=[audio_input, video_input, seed_input],  # Both audio and video as inputs
-                    outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
-                    fn=tango,  # Function that processes both audio and video inputs
-                    label="Select Combined Audio and Video Examples (Cached)",
-                    cache_examples=True,
-                )
+        # with gr.Row():
+        #     with gr.Column(scale=4):
+        #         gr.Examples(
+        #             examples=combined_examples,
+        #             inputs=[audio_input, video_input, seed_input],  # Both audio and video as inputs
+        #             outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
+        #             fn=tango,  # Function that processes both audio and video inputs
+        #             label="Select Combined Audio and Video Examples (Cached)",
+        #             cache_examples=True,
+        #         )
 
     return Interface
 
+class ResponseModel(BaseModel):
+    code: int
+    message: str
+    body: Any
+
+
+def create_response(code: int, message: str, body: Any = None) -> JSONResponse:
+    return JSONResponse(content=ResponseModel(code=code, message=message, body=body).model_dump())
+
+
+def gradio_interface(source_image, driven_audio, *args):
+    task_id = generate_task(source_image, driven_audio, *args)
+    return f"Task ID: {task_id}"
+
+
+def generate_task(task_id, source_image_path, driven_audio_path, **kwargs):
+    result_path = tango(source_image_path, driven_audio_path, **kwargs)
+    logging.info("task is in process, result path: {}".format(result_path))
+    task_results[task_id] = result_path
+    return task_id
+
+@app.post("/km_tango/generator")
+async def generate(background_tasks: BackgroundTasks,
+                   source_audio: UploadFile = File(...),
+                   driven_video: UploadFile = File(...),
+                   seed: int = Form(2024)
+                   ):
+    temp_dir = './temp'
+    os.makedirs(temp_dir, exist_ok=True)
+    source_image_path = f"./temp/{source_audio.filename}"
+    with open(source_image_path, "wb") as buffer:
+        shutil.copyfileobj(source_audio.file, buffer)
+
+    driven_audio_path = f"./temp/{driven_video.filename}"
+    with open(driven_audio_path, "wb") as buffer:
+        shutil.copyfileobj(driven_video.file, buffer)
+
 
 if __name__ == "__main__":
-    os.environ["MASTER_ADDR"] = "127.0.0.1"
-    os.environ["MASTER_PORT"] = "8675"
-
-    demo = make_demo()
-    demo.launch(share=True)
+    app = gr.mount_gradio_app(app, make_demo(), path="/")
+    uvicorn.run(app, host="0.0.0.0", port=6006)

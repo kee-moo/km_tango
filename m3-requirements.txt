@@ -1,0 +1,49 @@
+# mac-m3本地启动依赖
+# 基础机器学习和科学计算库
+gradio
+scikit-image==0.21.0
+scikit-learn==1.3.2
+scipy==1.11.4
+smplx==0.1.28
+tqdm
+yacs
+numba
+opencv-contrib-python-headless==4.8.1.78  # 使用无GUI的headless版本，适配macOS ARM
+opencv-python-headless==4.8.1.78
+tensorboardx
+filterpy
+cython
+chumpy==0.70.0
+Pillow==9.5.0
+trimesh
+pyrender
+matplotlib
+json_tricks
+torchgeometry
+einops
+joblib
+easydict
+pycocotools  # 若有问题，安装 pycocotools-m1 或在代码中手动安装
+
+# OpenMMLab 系列库的无CUDA版本
+mmcv  # 不指定版本，确保安装CPU版本
+mmdet  # 检查是否有适配CPU的版本
+mmpose
+
+# 其他依赖
+wget
+gradio==4.44.1
+av==11.0.0
+ffmpeg-python
+mediapipe
+batch-face @ git+https://github.com/elliottzheng/batch-face.git@master
+diffusers==0.24.0
+imageio==2.33.0
+imageio-ffmpeg==0.4.9
+omegaconf==2.2.3
+open-clip-torch==2.20.0
+transformers==4.30.2
+moviepy
+igraph
+ConfigArgParse
+librosa
