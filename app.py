@@ -860,9 +860,9 @@ def gradio_interface(source_image, driven_audio, *args):
     return f"Task ID: {task_id}"
 
 
-def generate_task(task_id, source_audio_path, driven_vedio_path, **kwargs):
+def generate_task(task_id, source_audio_path, driven_video_path, **kwargs):
     task_results[task_id] = "task_results[task_id] = result_path"
-    result_path = tango(source_audio_path, driven_vedio_path, **kwargs)
+    result_path = tango(source_audio_path, driven_video_path, **kwargs)
     logging.info("task is in process, result path: {}".format(result_path))
     return task_id
 
@@ -875,15 +875,15 @@ async def generate(background_tasks: BackgroundTasks,
                    ):
     temp_dir = './temp'
     os.makedirs(temp_dir, exist_ok=True)
-    source_image_path = f"./temp/{source_audio.filename}"
-    with open(source_image_path, "wb") as buffer:
+    source_audio_path = f"./temp/{source_audio.filename}"
+    with open(source_audio_path, "wb") as buffer:
         shutil.copyfileobj(source_audio.file, buffer)
 
-    driven_audio_path = f"./temp/{driven_video.filename}"
-    with open(driven_audio_path, "wb") as buffer:
+    driven_video_path = f"./temp/{driven_video.filename}"
+    with open(driven_video_path, "wb") as buffer:
         shutil.copyfileobj(driven_video.file, buffer)
     task_id = str(uuid.uuid4())
-    background_tasks.add_task(generate_task, task_id, source_image_path, driven_video, seed=seed)
+    background_tasks.add_task(generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
 
 
 @app.get("/km_tango/task/status")
