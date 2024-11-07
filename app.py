@@ -5,6 +5,7 @@ from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any, Dict, Optional
 
+import aiofiles
 import gradio as gr
 import gc
 
@@ -59,7 +60,7 @@ log_handler.setFormatter(
 )
 
 # 配置日志
-logging.basicConfig(level=logging.DEBUG, handlers=[log_handler])
+logging.basicConfig(level=logging.INFO, handlers=[log_handler])
 
 task_results: Dict[str, Optional[str]] = {}
 
@@ -831,16 +832,16 @@ def make_demo():
             outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
         )
 
-        with gr.Row():
-            with gr.Column(scale=4):
-                gr.Examples(
-                    examples=combined_examples,
-                    inputs=[audio_input, video_input, seed_input],  # Both audio and video as inputs
-                    outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
-                    fn=tango,  # Function that processes both audio and video inputs
-                    label="Select Combined Audio and Video Examples (Cached)",
-                    cache_examples=True,
-                )
+        # with gr.Row():
+        #     with gr.Column(scale=4):
+        #         gr.Examples(
+        #             examples=combined_examples,
+        #             inputs=[audio_input, video_input, seed_input],  # Both audio and video as inputs
+        #             outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
+        #             fn=tango,  # Function that processes both audio and video inputs
+        #             label="Select Combined Audio and Video Examples (Cached)",
+        #             cache_examples=True,
+        #         )
 
     return Interface
 
@@ -875,13 +876,13 @@ async def generate(background_tasks: BackgroundTasks,
                    ):
     temp_dir = './temp'
     os.makedirs(temp_dir, exist_ok=True)
-    source_audio_path = f"./temp/{source_audio.filename}"
-    with open(source_audio_path, "wb") as buffer:
-        shutil.copyfileobj(source_audio.file, buffer)
+    source_audio_path = f"{temp_dir}/{source_audio.filename}"
+    async with aiofiles.open(source_audio_path, "wb") as buffer:
+        await buffer.write(await source_audio.read())
 
-    driven_video_path = f"./temp/{driven_video.filename}"
-    with open(driven_video_path, "wb") as buffer:
-        shutil.copyfileobj(driven_video.file, buffer)
+    driven_video_path = f"{temp_dir}/{driven_video.filename}"
+    async with aiofiles.open(driven_video_path, "wb") as buffer:
+        await buffer.write(await driven_video.read())
     task_id = str(uuid.uuid4())
     background_tasks.add_task(async_generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
     return create_response(0, "ok", {"task_id": task_id})
