@@ -1,11 +1,14 @@
 import logging
 import os
+import uuid
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any, Dict, Optional
 
 import gradio as gr
 import gc
+
+import pytz
 import soundfile as sf
 import shutil
 import argparse
@@ -15,6 +18,7 @@ import numpy as np
 import librosa
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from fastapi.responses import FileResponse
 
 import emage.mertic  # noqa: F401 # somehow this must be imported, even though it is not used directly
 from decord import VideoReader
@@ -26,7 +30,7 @@ import torch
 import torch.nn.functional as F
 import smplx
 import igraph
-from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException
 import uvicorn
 
 app = FastAPI()
@@ -441,43 +445,43 @@ def test_fn(model, device, iteration, candidate_json_path, test_path, cfg, audio
         ]
         return result
 
-    print(f"delete gt-nodes {start_node}, {end_node}")
-    nodes_to_delete = list(range(start_node, end_node))
-    graph.delete_vertices(nodes_to_delete)
-    graph = graph_pruning(graph)
-    path_list, is_continue_list = search_path_dp(graph, audio_low_all, audio_high_all, top_k=1, search_mode="both")
-    res_motion = []
-    counter = 1
-    for path, is_continue in zip(path_list, is_continue_list):
-        res_motion_current = path_visualization_v2(
-            graph,
-            path,
-            is_continue,
-            os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"),
-            audio_path=None,
-            return_motion=True,
-            verbose_continue=True,
-        )
-        video_temp_path = os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4")
-        video_reader = VideoReader(video_temp_path)
-        video_np = []
-        for i in range(len(video_reader)):
-            if i == 0:
-                continue
-            video_frame = video_reader[i].asnumpy()
-            video_np.append(Image.fromarray(video_frame))
-        adjusted_video_pil = adjust_statistics_to_match_reference([video_np])
-        save_videos_from_pil(
-            adjusted_video_pil[0], os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"), fps=graph.vs[0]["fps"],
-            bitrate=2000000
-        )
-
-        audio_temp_path = audio_path
-        lipsync_output_path = os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4")
-        cmd_wav2lip_2 = f"cd Wav2Lip; python {wav2lip_script_path} --checkpoint_path {wav2lip_checkpoint_path} --face {video_temp_path} --audio {audio_temp_path} --outfile {lipsync_output_path} --nosmooth --out_height 720"
-        subprocess.run(cmd_wav2lip_2, shell=True)
-        res_motion.append(res_motion_current)
-        np.savez(os.path.join(save_dir, f"audio_{idx}_retri_{counter}.npz"), motion=res_motion_current)
+    # print(f"delete gt-nodes {start_node}, {end_node}")
+    # nodes_to_delete = list(range(start_node, end_node))
+    # graph.delete_vertices(nodes_to_delete)
+    # graph = graph_pruning(graph)
+    # path_list, is_continue_list = search_path_dp(graph, audio_low_all, audio_high_all, top_k=1, search_mode="both")
+    # res_motion = []
+    # counter = 1
+    # for path, is_continue in zip(path_list, is_continue_list):
+    #     res_motion_current = path_visualization_v2(
+    #         graph,
+    #         path,
+    #         is_continue,
+    #         os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"),
+    #         audio_path=None,
+    #         return_motion=True,
+    #         verbose_continue=True,
+    #     )
+    #     video_temp_path = os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4")
+    #     video_reader = VideoReader(video_temp_path)
+    #     video_np = []
+    #     for i in range(len(video_reader)):
+    #         if i == 0:
+    #             continue
+    #         video_frame = video_reader[i].asnumpy()
+    #         video_np.append(Image.fromarray(video_frame))
+    #     adjusted_video_pil = adjust_statistics_to_match_reference([video_np])
+    #     save_videos_from_pil(
+    #         adjusted_video_pil[0], os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4"), fps=graph.vs[0]["fps"],
+    #         bitrate=2000000
+    #     )
+    #
+    #     audio_temp_path = audio_path
+    #     lipsync_output_path = os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4")
+    #     cmd_wav2lip_2 = f"cd Wav2Lip; python {wav2lip_script_path} --checkpoint_path {wav2lip_checkpoint_path} --face {video_temp_path} --audio {audio_temp_path} --outfile {lipsync_output_path} --nosmooth --out_height 720"
+    #     subprocess.run(cmd_wav2lip_2, shell=True)
+    #     res_motion.append(res_motion_current)
+    #     np.savez(os.path.join(save_dir, f"audio_{idx}_retri_{counter}.npz"), motion=res_motion_current)
 
     result = [
         os.path.join(save_dir, f"audio_{idx}_retri_0.mp4"),
@@ -790,7 +794,7 @@ def make_demo():
 
         with gr.Row():
             with gr.Column(scale=1):
-                audio_input = gr.Audio(label="Upload your audio")
+                audio_input = gr.Audio(label="Upload your audio", type="filepath")
                 seed_input = gr.Number(label="Seed", value=2024, interactive=True)
             with gr.Column(scale=2):
                 gr.Examples(
@@ -835,6 +839,7 @@ def make_demo():
 
     return Interface
 
+
 class ResponseModel(BaseModel):
     code: int
     message: str
@@ -850,11 +855,12 @@ def gradio_interface(source_image, driven_audio, *args):
     return f"Task ID: {task_id}"
 
 
-def generate_task(task_id, source_image_path, driven_audio_path, **kwargs):
-    result_path = tango(source_image_path, driven_audio_path, **kwargs)
+def generate_task(task_id, source_audio_path, driven_vedio_path, **kwargs):
+    task_results[task_id] = "task_results[task_id] = result_path"
+    result_path = tango(source_audio_path, driven_vedio_path, **kwargs)
     logging.info("task is in process, result path: {}".format(result_path))
-    task_results[task_id] = result_path
     return task_id
+
 
 @app.post("/km_tango/generator")
 async def generate(background_tasks: BackgroundTasks,
@@ -871,6 +877,34 @@ async def generate(background_tasks: BackgroundTasks,
     driven_audio_path = f"./temp/{driven_video.filename}"
     with open(driven_audio_path, "wb") as buffer:
         shutil.copyfileobj(driven_video.file, buffer)
+    task_id = str(uuid.uuid4())
+    background_tasks.add_task(generate_task, task_id, source_image_path, driven_video, seed=seed)
+
+
+@app.get("/km_tango/task/status")
+async def get_task_status(task_id: str):
+    result_path = task_results.get(task_id)
+    if result_path:
+        if os.path.exists(result_path):
+            return create_response(0, "ok", "task is complete")
+    return create_response(1, "ok", "task is process")
+
+
+@app.get("/km_tango/download")
+async def download(task_id: str):
+    result_path = task_results.get(task_id)
+    logging.info("download result path: {}".format(result_path))
+    if result_path is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if not os.path.exists(result_path):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return FileResponse(result_path, media_type="application/octet-stream", filename=os.path.basename(result_path))
+
+
+@app.get("/km_tango/heartbeat")
+async def heartbeat():
+    time = datetime.now(pytz.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
+    return create_response(0, "ok", {"current_time": time})
 
 
 if __name__ == "__main__":
