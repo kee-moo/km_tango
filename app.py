@@ -884,6 +884,7 @@ async def generate(background_tasks: BackgroundTasks,
         shutil.copyfileobj(driven_video.file, buffer)
     task_id = str(uuid.uuid4())
     background_tasks.add_task(generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
+    return create_response(0, "ok", {"task_id": task_id})
 
 
 @app.get("/km_tango/task/status")
