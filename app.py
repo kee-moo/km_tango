@@ -856,11 +856,11 @@ def create_response(code: int, message: str, body: Any = None) -> JSONResponse:
 
 
 def gradio_interface(source_image, driven_audio, *args):
-    task_id = generate_task(source_image, driven_audio, *args)
+    task_id = async_generate_task(source_image, driven_audio, *args)
     return f"Task ID: {task_id}"
 
 
-def generate_task(task_id, source_audio_path, driven_video_path, **kwargs):
+async def async_generate_task(task_id, source_audio_path, driven_video_path, **kwargs):
     task_results[task_id] = "./outputs/gradio/test_0/retrieved_motions_0/audio_0_retri_0.mp4"
     result_path = tango(source_audio_path, driven_video_path, **kwargs)
     logging.info("task is in process, result path: {}".format(result_path))
@@ -883,7 +883,7 @@ async def generate(background_tasks: BackgroundTasks,
     with open(driven_video_path, "wb") as buffer:
         shutil.copyfileobj(driven_video.file, buffer)
     task_id = str(uuid.uuid4())
-    background_tasks.add_task(generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
+    background_tasks.add_task(async_generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
     return create_response(0, "ok", {"task_id": task_id})
 
 
