@@ -602,13 +602,15 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
     experiment_ckpt_dir = os.path.join(OUTPUT_DIR, cfg.exp_name)
     saved_audio_path = os.path.join(OUTPUT_DIR, "saved_audio.wav")
     # 获取音频波形和采样率并写入到本地 TODO 下载音频
-    sample_rate, audio_waveform = audio_path
-    sf.write(saved_audio_path, audio_waveform, sample_rate)
-    # 音频重采样
     if isinstance(audio_path, str):  # 如果是路径，加载音频文件
         audio_waveform, sample_rate = librosa.load(audio_path, sr=None)
     elif isinstance(audio_path, tuple) and len(audio_path) == 2:  # 如果是元组，直接解包
         sample_rate, audio_waveform = audio_path
+    else:
+        raise ValueError("audio_path 必须是音频文件路径或包含采样率和波形数据的元组")
+    sf.write(saved_audio_path, audio_waveform, sample_rate)
+    # 音频重采样
+    audio_waveform, sample_rate = librosa.load(saved_audio_path)
     # print(audio_waveform.shape)
     resampled_audio = librosa.resample(audio_waveform, orig_sr=sample_rate, target_sr=TARGET_SR)
     required_length = int(TARGET_SR * (128 / 30)) * 2
