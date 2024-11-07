@@ -1,11 +1,12 @@
+import asyncio
 import logging
 import os
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from typing import Any, Dict, Optional
 
-import aiofiles
 import gradio as gr
 import gc
 
@@ -867,6 +868,7 @@ async def async_generate_task(task_id, source_audio_path, driven_video_path, **k
     logging.info("task is in process, result path: {}".format(result_path))
     return task_id
 
+thread_pool = ThreadPoolExecutor()
 
 @app.post("/km_tango/generator")
 async def generate(background_tasks: BackgroundTasks,
@@ -876,15 +878,16 @@ async def generate(background_tasks: BackgroundTasks,
                    ):
     temp_dir = './temp'
     os.makedirs(temp_dir, exist_ok=True)
-    source_audio_path = f"{temp_dir}/{source_audio.filename}"
-    async with aiofiles.open(source_audio_path, "wb") as buffer:
-        await buffer.write(await source_audio.read())
+    source_audio_path = f"./temp/{source_audio.filename}"
+    with open(source_audio_path, "wb") as buffer:
+        shutil.copyfileobj(source_audio.file, buffer)
 
-    driven_video_path = f"{temp_dir}/{driven_video.filename}"
-    async with aiofiles.open(driven_video_path, "wb") as buffer:
-        await buffer.write(await driven_video.read())
+    driven_video_path = f"./temp/{driven_video.filename}"
+    with open(driven_video_path, "wb") as buffer:
+        shutil.copyfileobj(driven_video.file, buffer)
     task_id = str(uuid.uuid4())
-    background_tasks.add_task(async_generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(thread_pool, async_generate_task, task_id, source_audio_path, driven_video_path, seed)
     return create_response(0, "ok", {"task_id": task_id})
 
 
