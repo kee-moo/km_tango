@@ -914,5 +914,7 @@ async def heartbeat():
 
 
 if __name__ == "__main__":
-    app = gr.mount_gradio_app(app, make_demo(), path="/")
+    demo = make_demo()
+    demo.queue()
+    app = gr.mount_gradio_app(app, demo, path="/")
     uvicorn.run(app, port=6006)
