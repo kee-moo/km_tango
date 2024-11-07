@@ -861,7 +861,7 @@ def gradio_interface(source_image, driven_audio, *args):
 
 
 def generate_task(task_id, source_audio_path, driven_video_path, **kwargs):
-    task_results[task_id] = "task_results[task_id] = result_path"
+    task_results[task_id] = "./outputs/gradio/test_0/retrieved_motions_0/audio_0_retri_0.mp4"
     result_path = tango(source_audio_path, driven_video_path, **kwargs)
     logging.info("task is in process, result path: {}".format(result_path))
     return task_id
