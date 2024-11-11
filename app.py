@@ -867,7 +867,7 @@ async def async_generate_task(task_id, source_audio_path, driven_video_path, **k
     return task_id
 
 
-@app.post("/km_tango/generator")
+@app.post("/km_tango/generate")
 async def generate(background_tasks: BackgroundTasks,
                    source_audio: UploadFile = File(...),
                    driven_video: UploadFile = File(...),
