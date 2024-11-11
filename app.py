@@ -584,7 +584,7 @@ character_name_to_yaml = {
 }
 
 TARGET_SR = 16000
-MAX_LENGTH_SECONDS = 20
+MAX_LENGTH_SECONDS = 10
 OUTPUT_DIR = os.path.join(SCRIPT_PATH, "outputs/")
 
 
