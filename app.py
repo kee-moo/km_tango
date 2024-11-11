@@ -523,8 +523,8 @@ def prepare_all(yaml_name):
     return config
 
 
-# 提取10秒的视频
-def save_first_10_seconds(video_path, output_path="./save_video.mp4", max_length=512):
+# 提取20秒的视频
+def save_first_20_seconds(video_path, output_path="./save_video.mp4", max_length=512):
     if os.path.exists(output_path):
         os.remove(output_path)
 
@@ -614,13 +614,11 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
     audio_waveform, sample_rate = librosa.load(saved_audio_path)
     # print(audio_waveform.shape)
     resampled_audio = librosa.resample(audio_waveform, orig_sr=sample_rate, target_sr=TARGET_SR)
-    # # 计算20秒对应的采样点数
-    # max_length = TARGET_SR * MAX_LENGTH_SECONDS
-    # # 如果音频超过20秒，则截取前20秒，否则保留原始长度
-    # if len(resampled_audio) > max_length:
-    #     resampled_audio = resampled_audio[:max_length]
-    required_length = int(TARGET_SR * (128 / 30)) * 2
-    resampled_audio = resampled_audio[:required_length]
+    # 计算20秒对应的采样点数
+    max_length = TARGET_SR * MAX_LENGTH_SECONDS
+    # 如果音频超过20秒，则截取前20秒，否则保留原始长度
+    if len(resampled_audio) > max_length:
+        resampled_audio = resampled_audio[:max_length]
     sf.write(saved_audio_path, resampled_audio, TARGET_SR)
     audio_path = saved_audio_path
     # 设置视频训练集路径
@@ -633,7 +631,7 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
         create_graph = True
         # load video, and save it to "./save_video.mp4 for the first 20s of the video."
         os.makedirs(video_folder_path, exist_ok=True)
-        save_first_10_seconds(character_name, os.path.join(video_folder_path, "save_video.mp4"))
+        save_first_20_seconds(character_name, os.path.join(video_folder_path, "save_video.mp4"))
     # 运行图形处理
     if create_graph:
         data_save_path = os.path.join(OUTPUT_DIR, "tmpdata")
