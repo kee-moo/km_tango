@@ -426,7 +426,7 @@ def test_fn(model, device, iteration, candidate_json_path, test_path, cfg, audio
 
         audio_temp_path = audio_path
         lipsync_output_path = os.path.join(save_dir, f"audio_{idx}_retri_{counter}.mp4")
-        cmd_wav2lip_1 = f"cd Wav2Lip; python {wav2lip_script_path} --checkpoint_path {wav2lip_checkpoint_path} --face {video_temp_path} --audio {audio_temp_path} --outfile {lipsync_output_path} --nosmooth --out_height 720"
+        cmd_wav2lip_1 = f"cd Wav2Lip; python {wav2lip_script_path} --checkpoint_path {wav2lip_checkpoint_path} --face {video_temp_path} --audio {audio_temp_path} --outfile {lipsync_output_path} --nosmooth --resize_factor 720"
         subprocess.run(cmd_wav2lip_1, shell=True)
 
         res_motion.append(res_motion_current)
