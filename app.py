@@ -835,16 +835,16 @@ def make_demo():
             outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
         )
 
-        # with gr.Row():
-        #     with gr.Column(scale=4):
-        #         gr.Examples(
-        #             examples=combined_examples,
-        #             inputs=[audio_input, video_input, seed_input],  # Both audio and video as inputs
-        #             outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
-        #             fn=tango,  # Function that processes both audio and video inputs
-        #             label="Select Combined Audio and Video Examples (Cached)",
-        #             cache_examples=True,
-        #         )
+        with gr.Row():
+            with gr.Column(scale=4):
+                gr.Examples(
+                    examples=combined_examples,
+                    inputs=[audio_input, video_input, seed_input],  # Both audio and video as inputs
+                    outputs=[video_output_1, video_output_2, file_output_1, file_output_2],
+                    fn=tango,  # Function that processes both audio and video inputs
+                    label="Select Combined Audio and Video Examples (Cached)",
+                    cache_examples=True,
+                )
 
     return Interface
 
