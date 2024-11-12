@@ -635,6 +635,7 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
 
     if only_wav2lip:
         save_dir = os.path.join(os.path.join(experiment_ckpt_dir, "test_0"), "retrieved_motions_0")
+        os.makedirs(save_dir, exist_ok=True)
         video_save_path = os.path.join(video_folder_path, "save_video.mp4")
         lip_output_path = os.path.join(save_dir, "audio_0_retri_0.mp4")
         wav2lip_checkpoint_path = os.path.join(SCRIPT_PATH,
