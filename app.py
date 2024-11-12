@@ -641,6 +641,7 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
                                                "Wav2Lip/checkpoints/wav2lip_gan.pth")  # Update this path to your Wav2Lip checkpoint
         wav2lip_script_path = os.path.join(SCRIPT_PATH, "Wav2Lip/inference.py")
         cmd_wav2lip_2 = f"cd Wav2Lip; python {wav2lip_script_path} --checkpoint_path {wav2lip_checkpoint_path} --face {video_save_path} --audio {saved_audio_path} --outfile {lip_output_path} --nosmooth"
+        print(cmd_wav2lip_2)
         subprocess.run(cmd_wav2lip_2, shell=True)
         result = [
             os.path.join(save_dir, f"audio_0_retri_0.mp4")
