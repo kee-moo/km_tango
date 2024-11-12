@@ -584,12 +584,12 @@ character_name_to_yaml = {
 }
 
 TARGET_SR = 16000
-MAX_LENGTH_SECONDS = 10
+MAX_LENGTH_SECONDS = 60
 OUTPUT_DIR = os.path.join(SCRIPT_PATH, "outputs/")
 
 
 # @spaces.GPU(duration=200)
-def tango(audio_path, character_name, seed, create_graph=False, video_folder_path=None):
+def tango(audio_path, character_name, seed, create_graph=False, video_folder_path=None, only_wav2lip=False):
     # 重新生成目录
     shutil.rmtree(OUTPUT_DIR, ignore_errors=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -632,6 +632,20 @@ def tango(audio_path, character_name, seed, create_graph=False, video_folder_pat
         # load video, and save it to "./save_video.mp4 for the first 20s of the video."
         os.makedirs(video_folder_path, exist_ok=True)
         save_first_20_seconds(character_name, os.path.join(video_folder_path, "save_video.mp4"))
+
+    if only_wav2lip:
+        save_dir = os.path.join(os.path.join(experiment_ckpt_dir, "test_0"), "retrieved_motions_0")
+        video_save_path = os.path.join(video_folder_path, "save_video.mp4")
+        lip_output_path = os.path.join(save_dir, "audio_0_retri_0.mp4")
+        wav2lip_checkpoint_path = os.path.join(SCRIPT_PATH,
+                                               "Wav2Lip/checkpoints/wav2lip_gan.pth")  # Update this path to your Wav2Lip checkpoint
+        wav2lip_script_path = os.path.join(SCRIPT_PATH, "Wav2Lip/inference.py")
+        cmd_wav2lip_2 = f"cd Wav2Lip; python {wav2lip_script_path} --checkpoint_path {wav2lip_checkpoint_path} --face {video_save_path} --audio {saved_audio_path} --outfile {lip_output_path} --nosmooth"
+        subprocess.run(cmd_wav2lip_2, shell=True)
+        result = [
+            os.path.join(save_dir, f"audio_0_retri_0.mp4")
+        ]
+        return result
     # 运行图形处理
     if create_graph:
         data_save_path = os.path.join(OUTPUT_DIR, "tmpdata")
@@ -875,7 +889,8 @@ async def async_generate_task(task_id, source_audio_path, driven_video_path, **k
 async def generate(background_tasks: BackgroundTasks,
                    source_audio: UploadFile = File(...),
                    driven_video: UploadFile = File(...),
-                   seed: int = Form(2024)
+                   seed: int = Form(2024),
+                   only_wav2lip: bool = Form(False),
                    ):
     temp_dir = './temp'
     os.makedirs(temp_dir, exist_ok=True)
@@ -887,7 +902,8 @@ async def generate(background_tasks: BackgroundTasks,
     with open(driven_video_path, "wb") as buffer:
         shutil.copyfileobj(driven_video.file, buffer)
     task_id = str(uuid.uuid4())
-    background_tasks.add_task(async_generate_task, task_id, source_audio_path, driven_video_path, seed=seed)
+    background_tasks.add_task(async_generate_task, task_id, source_audio_path, driven_video_path, seed=seed,
+                              only_wav2lip=only_wav2lip)
     return create_response(0, "ok", {"task_id": task_id})
 
 
